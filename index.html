@@ -3,86 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LIV - Live Board</title>
+    <title>LIV Live Departure Board</title>
     <style>
-        :root { --bg: #0a0a0c; --yellow: #ffee00; --green: #00ff88; }
-        body { background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; padding: 20px; }
-        .board { max-width: 900px; margin: auto; background: var(--bg); padding: 25px; border: 1px solid #333; border-radius: 12px; }
-        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 15px; }
-        .station { font-size: 1.8rem; color: var(--yellow); font-weight: bold; }
-        .row { display: flex; font-size: 1.5rem; font-weight: bold; padding: 18px 0; border-bottom: 1px solid #1a1a1a; }
-        .time { width: 90px; }
-        .dest { flex-grow: 1; text-transform: uppercase; }
-        .etd { width: 110px; text-align: right; color: var(--green); }
-        #status-bar { font-size: 0.8rem; color: #666; margin-top: 15px; }
-        #error-log { color: #ff6666; font-family: monospace; font-size: 0.8rem; margin-top: 10px; display: none; background: #200; padding: 10px; border: 1px solid red; }
+        :root { --bg: #0a0a0c; --yellow: #ffee00; --green: #00ff88; --orange: #ffa500; }
+        body { background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; overflow: hidden; }
+        
+        /* The Board Container */
+        .board { max-width: 1000px; margin: auto; background: var(--bg); padding: 30px; border-radius: 12px; border: 1px solid #333; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
+        
+        /* Header Section */
+        .header { display: flex; justify-content: space-between; border-bottom: 3px solid #333; padding-bottom: 20px; margin-bottom: 10px; }
+        #station-name { font-size: 2.5rem; color: var(--yellow); font-weight: 800; text-transform: uppercase; letter-spacing: 2px; }
+        #clock { font-size: 2.5rem; font-family: 'Courier New', monospace; font-weight: bold; }
+        
+        /* Train Rows */
+        .row { display: flex; font-size: 1.8rem; font-weight: bold; padding: 20px 0; border-bottom: 1px solid #1a1a1a; align-items: center; animation: fadeIn 0.5s ease-in; }
+        .time { width: 110px; color: #fff; }
+        .dest { flex-grow: 1; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .plat { width: 70px; text-align: center; background: #222; border-radius: 6px; margin: 0 20px; color: var(--yellow); border: 1px solid #444; }
+        .etd { width: 150px; text-align: right; }
+
+        /* Status Messages */
+        .status-msg { padding: 50px; text-align: center; font-size: 1.2rem; color: #888; border: 1px dashed #333; margin-top: 20px; }
+        .loading-spinner { width: 30px; height: 30px; border: 4px solid #333; border-top: 4px solid var(--yellow); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
 <div class="board">
     <div class="header">
-        <div class="station">LIVERPOOL LIME STREET</div>
+        <div id="station-name">Liverpool Lime Street</div>
         <div id="clock">00:00:00</div>
     </div>
-    <div id="list">Connecting to Rail Data Marketplace...</div>
-    <div id="error-log"></div>
-    <div id="status-bar">Syncing via x-apikey header...</div>
+    
+    <div id="train-list">
+        <div class="status-msg">
+            <div class="loading-spinner"></div>
+            Connecting to Cloudflare Proxy...
+        </div>
+    </div>
 </div>
 
 <script>
-    const API_KEY = 'OY6k1qcYgWZxxesIXJQbIkO2UXyAnVmrVDpkljOBUc0uzCKL';
-    const STATION_CODE = 'LIV';
+    // REPLACE THIS URL with your actual Cloudflare Worker URL
+    const PROXY_URL = "https://your-worker-name.workers.dev"; 
 
-    async function fetchDepartures() {
-        const list = document.getElementById('list');
-        const errLog = document.getElementById('error-log');
-        
-        // IMPORTANT: We use the AllOrigins proxy to strip the "raildata.org.uk" restriction 
-        // so it works on GitHub, but we MUST pass the custom header.
-        const targetUrl = `https://raildata.org.uk/api/train-station-departures/${STATION_CODE}`;
+    async function updateBoard() {
+        const list = document.getElementById('train-list');
         
         try {
-            const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}&apikey=${API_KEY}`, {
-                method: 'GET'
-            });
+            const response = await fetch(PROXY_URL);
+            const data = await response.json();
 
-            const wrapper = await response.json();
-            // The RDM API returns the data inside wrapper.contents
-            const data = JSON.parse(wrapper.contents);
-
-            if (data && data.trainServices) {
+            if (data.trainServices && data.trainServices.length > 0) {
                 render(data.trainServices);
-                errLog.style.display = 'none';
+            } else if (data.error) {
+                list.innerHTML = `
+                    <div class="status-msg">
+                        <div style="color: var(--orange); font-weight: bold; margin-bottom: 10px;">${data.error}</div>
+                        <div>${data.help || 'Please wait for National Rail to sync your API key.'}</div>
+                        <div style="font-size: 0.8rem; margin-top: 20px; color: #555;">Status Code: ${data.status || 500}</div>
+                    </div>`;
             } else {
-                throw new Error("No train services found in response.");
+                list.innerHTML = `<div class="status-msg">No scheduled departures found at this time.</div>`;
             }
         } catch (e) {
-            console.error(e);
-            // If the proxy fails, we show the diagnostic
-            errLog.style.display = 'block';
-            errLog.innerText = "Connection Note: RDM servers are currently restricting direct browser access. Ensure your subscription is active.";
-            list.innerHTML = "<div style='color:#555'>Waiting for data stream...</div>";
+            list.innerHTML = `<div class="status-msg" style="color: red;">Failed to connect to Cloudflare Worker. Check your URL.</div>`;
         }
     }
 
     function render(trains) {
-        const list = document.getElementById('list');
+        const list = document.getElementById('train-list');
         list.innerHTML = '';
-        trains.forEach(t => {
-            const dest = t.destination[0].locationName;
+        
+        trains.slice(0, 6).forEach(t => { // Show top 6 trains
+            const destination = t.destination[0].locationName;
+            const statusColor = t.etd === 'On Time' ? 'var(--green)' : 'var(--orange)';
+            
             list.innerHTML += `
                 <div class="row">
                     <div class="time">${t.std}</div>
-                    <div class="dest">${dest}</div>
-                    <div class="etd" style="color:${t.etd === 'On Time' ? '#00ff88' : '#ffa500'}">${t.etd}</div>
+                    <div class="dest">${destination}</div>
+                    <div class="plat">${t.platform || '-'}</div>
+                    <div class="etd" style="color: ${statusColor}">${t.etd}</div>
                 </div>`;
         });
     }
 
-    setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'); }, 1000);
-    fetchDepartures();
-    setInterval(fetchDepartures, 60000);
+    // Clock update
+    setInterval(() => {
+        document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB');
+    }, 1000);
+
+    // Initial load and auto-refresh every 45 seconds
+    updateBoard();
+    setInterval(updateBoard, 45000);
 </script>
+
 </body>
 </html>

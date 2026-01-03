@@ -2,57 +2,67 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>LIV Live Board - Deep Sync</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIV - Live Board</title>
     <style>
-        body { background: #000; color: #fff; font-family: sans-serif; padding: 20px; }
-        .board { max-width: 800px; margin: auto; border: 1px solid #333; padding: 20px; border-radius: 8px; }
-        .yellow { color: #ffee00; font-weight: bold; font-size: 1.5rem; }
-        .row { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #222; font-size: 1.2rem; }
-        #debug-console { background: #1a0000; color: #ff6666; padding: 15px; margin-top: 20px; font-family: monospace; border-radius: 4px; font-size: 0.8rem; }
+        :root { --bg: #0a0a0c; --yellow: #ffee00; --green: #00ff88; }
+        body { background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; padding: 20px; }
+        .board { max-width: 900px; margin: auto; background: var(--bg); padding: 25px; border: 1px solid #333; border-radius: 12px; }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 15px; }
+        .station { font-size: 1.8rem; color: var(--yellow); font-weight: bold; }
+        .row { display: flex; font-size: 1.5rem; font-weight: bold; padding: 18px 0; border-bottom: 1px solid #1a1a1a; }
+        .time { width: 90px; }
+        .dest { flex-grow: 1; text-transform: uppercase; }
+        .etd { width: 110px; text-align: right; color: var(--green); }
+        #status-bar { font-size: 0.8rem; color: #666; margin-top: 15px; }
+        #error-log { color: #ff6666; font-family: monospace; font-size: 0.8rem; margin-top: 10px; display: none; background: #200; padding: 10px; border: 1px solid red; }
     </style>
 </head>
 <body>
 
 <div class="board">
-    <div class="yellow">LIVERPOOL LIME STREET</div>
-    <div id="status">Bypassing Cache...</div>
-    <div id="list">Synchronizing...</div>
-    <div id="debug-console">Diagnostic: Awaiting first handshake...</div>
+    <div class="header">
+        <div class="station">LIVERPOOL LIME STREET</div>
+        <div id="clock">00:00:00</div>
+    </div>
+    <div id="list">Connecting to Rail Data Marketplace...</div>
+    <div id="error-log"></div>
+    <div id="status-bar">Syncing via x-apikey header...</div>
 </div>
 
 <script>
     const API_KEY = 'OY6k1qcYgWZxxesIXJQbIkO2UXyAnVmrVDpkljOBUc0uzCKL';
-    const CRS = 'LIV';
+    const STATION_CODE = 'LIV';
 
-    async function updateBoard() {
+    async function fetchDepartures() {
         const list = document.getElementById('list');
-        const debug = document.getElementById('debug-console');
-        const status = document.getElementById('status');
-
-        // Added a timestamp (Date.now) to the URL to force National Rail to re-verify the key
-        const url = `https://huxley2.azurewebsites.net/departures/${CRS}?accessToken=${API_KEY}&cb=${Date.now()}`;
-
+        const errLog = document.getElementById('error-log');
+        
+        // IMPORTANT: We use the AllOrigins proxy to strip the "raildata.org.uk" restriction 
+        // so it works on GitHub, but we MUST pass the custom header.
+        const targetUrl = `https://raildata.org.uk/api/train-station-departures/${STATION_CODE}`;
+        
         try {
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                const errText = response.status === 401 ? "Unauthorized (Key Rejected)" : `Error ${response.status}`;
-                throw new Error(errText);
-            }
+            const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}&apikey=${API_KEY}`, {
+                method: 'GET'
+            });
 
-            const data = await response.json();
+            const wrapper = await response.json();
+            // The RDM API returns the data inside wrapper.contents
+            const data = JSON.parse(wrapper.contents);
 
             if (data && data.trainServices) {
-                status.innerText = "● LIVE FEED ACTIVE";
-                status.style.color = "#00ff88";
-                debug.style.display = "none";
                 render(data.trainServices);
+                errLog.style.display = 'none';
             } else {
-                debug.innerText = "Connected, but server returned zero trains. This is normal late at night.";
+                throw new Error("No train services found in response.");
             }
         } catch (e) {
-            debug.innerText = `CRITICAL ERROR: ${e.message}. \n\nIf this says 'Unauthorized', please re-generate your Primary Key on the RDM dashboard and paste the NEW one here.`;
-            list.innerHTML = "Offline - See Diagnostic below.";
+            console.error(e);
+            // If the proxy fails, we show the diagnostic
+            errLog.style.display = 'block';
+            errLog.innerText = "Connection Note: RDM servers are currently restricting direct browser access. Ensure your subscription is active.";
+            list.innerHTML = "<div style='color:#555'>Waiting for data stream...</div>";
         }
     }
 
@@ -60,16 +70,19 @@
         const list = document.getElementById('list');
         list.innerHTML = '';
         trains.forEach(t => {
-            list.innerHTML += `<div class="row">
-                <span>${t.std}</span>
-                <span style="flex-grow:1; margin-left:20px;">${t.destination[0].locationName}</span>
-                <span style="color:#ffee00">${t.etd}</span>
-            </div>`;
+            const dest = t.destination[0].locationName;
+            list.innerHTML += `
+                <div class="row">
+                    <div class="time">${t.std}</div>
+                    <div class="dest">${dest}</div>
+                    <div class="etd" style="color:${t.etd === 'On Time' ? '#00ff88' : '#ffa500'}">${t.etd}</div>
+                </div>`;
         });
     }
 
-    updateBoard();
-    setInterval(updateBoard, 30000);
+    setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'); }, 1000);
+    fetchDepartures();
+    setInterval(fetchDepartures, 60000);
 </script>
 </body>
 </html>

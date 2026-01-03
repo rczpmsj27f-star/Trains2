@@ -3,26 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LIV Live Board - Forced Sync</title>
+    <title>LIV Live Board</title>
     <style>
         :root {
-            --bg-deep: #0a0a0c; --text-main: #ffffff; --accent-blue: #00aaff;
-            --station-yellow: #ffee00; --status-green: #00ff88; --status-orange: #ffa500;
-            --std-class-grey: #333;
+            --bg: #050505; --yellow: #ffee00; --green: #00ff88; --blue: #00aaff;
         }
-        body { background-color: #000; color: var(--text-main); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
-        .board { max-width: 1000px; margin: auto; background: var(--bg-deep); padding: 25px; border-radius: 12px; border: 1px solid #222; }
-        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 10px; }
-        #station-name { font-size: 2rem; color: var(--station-yellow); font-weight: bold; }
-        #clock { font-size: 2rem; font-family: monospace; }
-        .status-pill { padding: 4px 12px; border-radius: 4px; font-size: 0.8rem; text-transform: uppercase; margin-top: 10px; display: inline-block; }
-        .live { background: #004422; color: var(--status-green); }
-        .fail { background: #441111; color: #ff6666; }
-        .service-row { padding: 20px 0; border-bottom: 1px solid #1a1a1a; }
-        .main-line { display: flex; font-size: 1.5rem; font-weight: bold; justify-content: space-between; }
-        .dest { flex-grow: 1; margin: 0 20px; }
-        .marquee { color: #888; margin-top: 10px; font-size: 1rem; overflow: hidden; white-space: nowrap; }
-        #error-log { background: #1a1100; color: #ffcc00; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.8rem; margin-top: 15px; display: none; }
+        body { background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; padding: 20px; }
+        .board { max-width: 900px; margin: auto; background: var(--bg); padding: 20px; border: 1px solid #333; border-radius: 8px; }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        #station { font-size: 1.8rem; color: var(--yellow); font-weight: bold; text-transform: uppercase; }
+        #clock { font-size: 1.8rem; font-family: monospace; }
+        .status-pill { font-size: 0.7rem; padding: 3px 8px; border-radius: 3px; margin-top: 5px; display: inline-block; text-transform: uppercase; }
+        .online { background: #003311; color: var(--green); border: 1px solid var(--green); }
+        .offline { background: #331100; color: #ff4444; border: 1px solid #ff4444; }
+        .row { display: flex; font-size: 1.4rem; font-weight: 600; padding: 15px 0; border-bottom: 1px solid #1a1a1a; align-items: center; }
+        .time { width: 80px; }
+        .dest { flex-grow: 1; margin: 0 15px; }
+        .plat { width: 50px; text-align: center; background: #222; border-radius: 4px; }
+        .etd { width: 100px; text-align: right; }
+        .calling { color: #888; font-size: 0.9rem; margin-top: 5px; white-space: nowrap; overflow: hidden; }
+        #diag { background: #111; color: #ff8800; padding: 10px; font-family: monospace; font-size: 0.75rem; margin-top: 20px; border-radius: 4px; display: none; }
     </style>
 </head>
 <body>
@@ -30,86 +30,75 @@
 <div class="board">
     <div class="header">
         <div>
-            <div id="station-name">Liverpool Lime Street</div>
-            <div id="status-display" class="status-pill fail">Connecting...</div>
+            <div id="station">Liverpool Lime Street</div>
+            <div id="status" class="status-pill offline">Authorizing...</div>
         </div>
         <div id="clock">00:00:00</div>
     </div>
     
-    <div id="services-list">Handshaking with National Rail...</div>
+    <div id="list">Connecting to National Rail Darwin Feed...</div>
     
-    <div id="error-log"></div>
+    <div id="diag"></div>
 </div>
 
 <script>
-    const TOKEN = 'OY6k1qcYgWZxxesIXJQbIkO2UXyAnVmrVDpkljOBUc0uzCKL';
-    const STATION = 'LIV';
+    const API_KEY = 'OY6k1qcYgWZxxesIXJQbIkO2UXyAnVmrVDpkljOBUc0uzCKL';
+    const CRS = 'LIV';
 
-    async function fetchData() {
-        const list = document.getElementById('services-list');
-        const status = document.getElementById('status-display');
-        const errLog = document.getElementById('error-log');
+    async function updateBoard() {
+        const list = document.getElementById('list');
+        const status = document.getElementById('status');
+        const diag = document.getElementById('diag');
 
-        // CACHE BUSTER: We add a random number to the URL so the proxy can't use an old, failed result
-        const buster = Math.floor(Math.random() * 9999);
-        const url = `https://huxley2.azurewebsites.net/departures/${STATION}?accessToken=${TOKEN}&expand=true&cb=${buster}`;
+        // We use AllOrigins to wrap the request. This bypasses the "Load Failed" / CORS error.
+        const huxleyUrl = `https://huxley2.azurewebsites.net/departures/${CRS}?accessToken=${API_KEY}&expand=true`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(huxleyUrl)}&_=${new Date().getTime()}`;
 
         try {
-            const response = await fetch(url);
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error("Proxy Unreachable");
             
-            if (!response.ok) {
-                throw new Error(`Server Error: ${response.status}. This usually means your key is still 'Syncing' at National Rail.`);
-            }
-
-            const data = await response.json();
+            const wrapper = await response.json();
+            const data = JSON.parse(wrapper.contents); // AllOrigins wraps the JSON as a string
 
             if (data && data.trainServices) {
-                status.innerText = "Live Network Connected";
-                status.className = "status-pill live";
-                errLog.style.display = "none";
+                status.innerText = "GitHub Live Connection";
+                status.className = "status-pill online";
+                diag.style.display = "none";
                 render(data.trainServices);
             } else {
-                throw new Error("Connected, but no train data returned. (Check if it's late night/no trains scheduled).");
+                throw new Error("Key Validated, but no trains returned. Check if service is active.");
             }
-
         } catch (e) {
-            status.innerText = "Connection Failed";
-            status.className = "status-pill fail";
-            errLog.innerText = `Diagnostic Info: ${e.message}`;
-            errLog.style.display = "block";
-            list.innerHTML = "<div style='color:#666'>Waiting for data link...</div>";
+            status.innerText = "Connection Blocked";
+            status.className = "status-pill offline";
+            diag.innerText = "Diagnostic: " + e.message + " | Ensure you are viewing this via your GitHub Pages URL, not a local file.";
+            diag.style.display = "block";
         }
     }
 
-    function render(services) {
-        const container = document.getElementById('services-list');
-        container.innerHTML = '';
-        services.forEach(s => {
-            const row = document.createElement('div');
-            row.className = 'service-row';
-            const callingPoints = s.subsequentCallingPoints ? s.subsequentCallingPoints[0].callingPoint.map(p => p.locationName).join(' • ') : "Calling at all stations.";
+    function render(trains) {
+        const list = document.getElementById('list');
+        list.innerHTML = '';
+        trains.forEach(t => {
+            const stops = t.subsequentCallingPoints ? t.subsequentCallingPoints[0].callingPoint.map(cp => cp.locationName).join(' • ') : "See screens for stops";
+            const isDelayed = t.etd !== 'On Time';
             
-            row.innerHTML = `
-                <div class="main-line">
-                    <div style="width:80px">${s.std}</div>
-                    <div class="dest">${s.destination[0].locationName}</div>
-                    <div style="width:50px; text-align:center">${s.platform || '-'}</div>
-                    <div style="width:120px; text-align:right; color:${s.etd === 'On Time' ? '#00ff88' : '#ffa500'}">${s.etd}</div>
+            list.innerHTML += `
+                <div class="row">
+                    <div class="time">${t.std}</div>
+                    <div class="dest">${t.destination[0].locationName}</div>
+                    <div class="plat">${t.platform || '-'}</div>
+                    <div class="etd" style="color:${isDelayed ? '#ffa500' : '#00ff88'}">${t.etd}</div>
                 </div>
-                <div class="marquee">${callingPoints}</div>
+                <div class="calling">${stops}</div>
             `;
-            container.appendChild(row);
         });
     }
 
-    // Update clock
-    setInterval(() => {
-        document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB');
-    }, 1000);
-
-    // Initial fetch and auto-refresh every 60 seconds
-    fetchData();
-    setInterval(fetchData, 60000);
+    setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'); }, 1000);
+    updateBoard();
+    setInterval(updateBoard, 60000);
 </script>
 </body>
 </html>

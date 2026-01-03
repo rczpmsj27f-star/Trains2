@@ -3,46 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LIV - Live Departure Board</title>
+    <title>LIV Live Board - Forced Sync</title>
     <style>
         :root {
             --bg-deep: #0a0a0c; --text-main: #ffffff; --accent-blue: #00aaff;
-            --station-yellow: #ffee00; --status-green: #00ff88; --status-red: #ff4d4d;
-            --status-orange: #ffa500; --first-class-gold: #d4af37; --std-class-grey: #333;
+            --station-yellow: #ffee00; --status-green: #00ff88; --status-orange: #ffa500;
+            --std-class-grey: #333;
         }
-        body { background-color: #000; color: var(--text-main); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; overflow-x: hidden; }
-        .board { max-width: 1100px; margin: auto; background: var(--bg-deep); padding: 25px; border-radius: 12px; border: 1px solid #222; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 10px; }
-        #station-name { font-size: 2.2rem; font-weight: 800; color: var(--station-yellow); text-transform: uppercase; }
-        .controls { text-align: right; }
-        #clock { font-size: 2rem; font-family: monospace; font-weight: bold; }
-        .sync-info { font-size: 0.75rem; color: #666; margin-top: 5px; text-transform: uppercase; }
-        #status-pill { font-size: 0.8rem; padding: 4px 10px; border-radius: 4px; text-transform: uppercase; display: inline-block; margin-top: 10px; }
-        .status-live { background: #004422; color: var(--status-green); border: 1px solid var(--status-green); }
-        .status-demo { background: #442200; color: var(--status-orange); border: 1px solid var(--status-orange); }
-        .refresh-btn { background: #222; color: #fff; border: 1px solid #444; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
-        
-        .service-row { display: flex; flex-direction: column; padding: 25px 0; border-bottom: 1px solid #1a1a1a; }
-        .main-line { display: flex; align-items: center; width: 100%; font-size: 1.8rem; font-weight: 600; }
-        .time { width: 110px; }
-        .dest-area { flex-grow: 1; }
-        .plat { width: 70px; text-align: center; background: #222; border-radius: 6px; margin-right: 20px; }
-        
-        .marquee-container { width: 100%; overflow: hidden; white-space: nowrap; margin-top: 12px; padding: 8px 0; }
-        .marquee-text { display: inline-block; padding-left: 100%; animation: scroll-left 30s linear infinite; color: #aaa; font-size: 1.15rem; }
-        @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
-        
-        .formation-wrapper { margin-top: 20px; }
-        .formation-label { color: #888; font-size: 0.9rem; text-transform: uppercase; font-weight: bold; margin-bottom: 10px; display: block; }
-        .coach-set { display: flex; gap: 8px; }
-        .coach { width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 1rem; color: #000; font-weight: 900; }
-        .coach-first { background: var(--first-class-gold); }
-        .coach-std { background: var(--std-class-grey); color: #fff; }
-        
-        .service-footer { margin-top: 20px; color: var(--accent-blue); font-size: 1rem; font-weight: 600; text-transform: uppercase; border-top: 1px solid #1a1a1a; padding-top: 10px; }
-        .on-time { color: var(--status-green); }
-        .delayed { color: var(--status-orange); }
-        #diag-msg { color: #ff8800; font-size: 0.85rem; padding: 10px; margin-top: 10px; border: 1px dashed; display: none; }
+        body { background-color: #000; color: var(--text-main); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
+        .board { max-width: 1000px; margin: auto; background: var(--bg-deep); padding: 25px; border-radius: 12px; border: 1px solid #222; }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 10px; }
+        #station-name { font-size: 2rem; color: var(--station-yellow); font-weight: bold; }
+        #clock { font-size: 2rem; font-family: monospace; }
+        .status-pill { padding: 4px 12px; border-radius: 4px; font-size: 0.8rem; text-transform: uppercase; margin-top: 10px; display: inline-block; }
+        .live { background: #004422; color: var(--status-green); }
+        .fail { background: #441111; color: #ff6666; }
+        .service-row { padding: 20px 0; border-bottom: 1px solid #1a1a1a; }
+        .main-line { display: flex; font-size: 1.5rem; font-weight: bold; justify-content: space-between; }
+        .dest { flex-grow: 1; margin: 0 20px; }
+        .marquee { color: #888; margin-top: 10px; font-size: 1rem; overflow: hidden; white-space: nowrap; }
+        #error-log { background: #1a1100; color: #ffcc00; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.8rem; margin-top: 15px; display: none; }
     </style>
 </head>
 <body>
@@ -50,120 +30,86 @@
 <div class="board">
     <div class="header">
         <div>
-            <div id="station-name">Fuckety fuck station</div>
-            <div id="status-pill" class="status-demo">GitHub Authorization Pending</div>
-            <div id="diag-msg"></div>
+            <div id="station-name">Liverpool Lime Street</div>
+            <div id="status-display" class="status-pill fail">Connecting...</div>
         </div>
-        <div class="controls">
-            <div id="clock">00:00:00</div>
-            <button class="refresh-btn" onclick="fetchData()">FORCE REFRESH</button>
-            <div class="sync-info">Last Sync: <span id="sync-time">Never</span></div>
-        </div>
+        <div id="clock">00:00:00</div>
     </div>
-    <div id="services-list">Authorizing via GitHub Pages...</div>
+    
+    <div id="services-list">Handshaking with National Rail...</div>
+    
+    <div id="error-log"></div>
 </div>
 
 <script>
     const TOKEN = 'OY6k1qcYgWZxxesIXJQbIkO2UXyAnVmrVDpkljOBUc0uzCKL';
-    const STATION_CODE = 'LIV';
+    const STATION = 'LIV';
 
     async function fetchData() {
-        const btn = document.querySelector('.refresh-btn');
-        const diag = document.getElementById('diag-msg');
-        btn.innerText = "AUTHORIZING...";
-        
-        // Direct Huxley call. Works only on GitHub Pages or HTTPS servers.
-        const url = `https://huxley2.azurewebsites.net/departures/${STATION_CODE}?accessToken=${TOKEN.trim()}&expand=true`;
+        const list = document.getElementById('services-list');
+        const status = document.getElementById('status-display');
+        const errLog = document.getElementById('error-log');
+
+        // CACHE BUSTER: We add a random number to the URL so the proxy can't use an old, failed result
+        const buster = Math.floor(Math.random() * 9999);
+        const url = `https://huxley2.azurewebsites.net/departures/${STATION}?accessToken=${TOKEN}&expand=true&cb=${buster}`;
 
         try {
             const response = await fetch(url);
             
-            if (response.ok) {
-                const data = await response.json();
-                if (data && data.trainServices) {
-                    updateStatus(true);
-                    renderBoard(data.trainServices);
-                    diag.style.display = 'none';
-                    finishSync();
-                    return;
-                }
+            if (!response.ok) {
+                throw new Error(`Server Error: ${response.status}. This usually means your key is still 'Syncing' at National Rail.`);
             }
 
-            // If we get here, the server responded but with an error (like 500 or 401)
-            throw new Error(response.status);
+            const data = await response.json();
+
+            if (data && data.trainServices) {
+                status.innerText = "Live Network Connected";
+                status.className = "status-pill live";
+                errLog.style.display = "none";
+                render(data.trainServices);
+            } else {
+                throw new Error("Connected, but no train data returned. (Check if it's late night/no trains scheduled).");
+            }
 
         } catch (e) {
-            updateStatus(false);
-            renderBoard(getMockData());
-            diag.style.display = 'block';
-            
-            if (window.location.protocol === 'file:') {
-                diag.innerHTML = "<strong>CRITICAL:</strong> You are running this as a local file. GitHub Authorization only works once you upload this to <strong>GitHub Pages</strong>.";
-            } else {
-                diag.innerHTML = `<strong>API SYNC ERROR:</strong> Server returned status ${e.message}. The National Rail network is currently rejecting your key. Please verify your subscription is 'Active' on the Rail Data Marketplace.`;
-            }
-            finishSync();
+            status.innerText = "Connection Failed";
+            status.className = "status-pill fail";
+            errLog.innerText = `Diagnostic Info: ${e.message}`;
+            errLog.style.display = "block";
+            list.innerHTML = "<div style='color:#666'>Waiting for data link...</div>";
         }
     }
 
-    function finishSync() {
-        document.getElementById('sync-time').innerText = new Date().toLocaleTimeString('en-GB');
-        document.querySelector('.refresh-btn').innerText = "FORCE REFRESH";
-    }
-
-    function updateStatus(isLive) {
-        const pill = document.getElementById('status-pill');
-        pill.innerText = isLive ? "GitHub Live" : "GitHub Authorization Failed";
-        pill.className = isLive ? "status-live" : "status-demo";
-    }
-
-    function renderBoard(services) {
+    function render(services) {
         const container = document.getElementById('services-list');
         container.innerHTML = '';
-        const coachLetters = "ABCDEFGHJKLMNPQRSTUVWXYZ".split("");
-
-        if (services.length === 0) {
-            container.innerHTML = "<div class='service-row'>No scheduled departures in the next 2 hours.</div>";
-            return;
-        }
-
         services.forEach(s => {
             const row = document.createElement('div');
             row.className = 'service-row';
-            const destName = s.destination ? s.destination[0].locationName : (s.destinationName || "Unknown");
+            const callingPoints = s.subsequentCallingPoints ? s.subsequentCallingPoints[0].callingPoint.map(p => p.locationName).join(' • ') : "Calling at all stations.";
             
-            let stops = "Calling at: " + (s.subsequentCallingPoints ? s.subsequentCallingPoints[0].callingPoint.map(cp => `${cp.locationName} (${cp.st})`).join(' • ') : "Information unavailable.");
-            let coachHtml = '';
-            const carCount = s.length || 0;
-            for (let i = 0; i < carCount; i++) {
-                coachHtml += `<div class="coach ${i < 2 ? 'coach-first' : 'coach-std'}">${coachLetters[i] || i+1}</div>`;
-            }
-
             row.innerHTML = `
                 <div class="main-line">
-                    <div class="time">${s.std || s.time}</div>
-                    <div class="dest-area">${destName}</div>
-                    <div class="plat">${s.platform || '-'}</div>
-                    <div class="status-text ${s.etd === 'On Time' ? 'on-time' : 'delayed'}">${s.etd || 'On Time'}</div>
+                    <div style="width:80px">${s.std}</div>
+                    <div class="dest">${s.destination[0].locationName}</div>
+                    <div style="width:50px; text-align:center">${s.platform || '-'}</div>
+                    <div style="width:120px; text-align:right; color:${s.etd === 'On Time' ? '#00ff88' : '#ffa500'}">${s.etd}</div>
                 </div>
-                <div style="padding-left:110px;">
-                    <div class="marquee-container"><div class="marquee-text">${stops}</div></div>
-                    ${carCount > 0 ? `<div class="formation-wrapper"><div class="coach-set">${coachHtml}</div></div>` : ''}
-                    <div class="service-footer">${s.operator}</div>
-                </div>`;
+                <div class="marquee">${callingPoints}</div>
+            `;
             container.appendChild(row);
         });
     }
 
-    function getMockData() {
-        return [
-            { std: "SYNCING", destinationName: "Waiting for GitHub...", platform: "-", etd: "...", operator: "System", length: 0 }
-        ];
-    }
+    // Update clock
+    setInterval(() => {
+        document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB');
+    }, 1000);
 
-    setInterval(fetchData, 60000);
-    setInterval(() => document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'), 1000);
+    // Initial fetch and auto-refresh every 60 seconds
     fetchData();
+    setInterval(fetchData, 60000);
 </script>
 </body>
 </html>

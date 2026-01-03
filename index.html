@@ -3,26 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LIV Live Board</title>
+    <title>LIV Live Board - System Fix</title>
     <style>
-        :root {
-            --bg: #050505; --yellow: #ffee00; --green: #00ff88; --blue: #00aaff;
-        }
+        :root { --bg: #0a0a0c; --yellow: #ffee00; --green: #00ff88; }
         body { background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; padding: 20px; }
-        .board { max-width: 900px; margin: auto; background: var(--bg); padding: 20px; border: 1px solid #333; border-radius: 8px; }
-        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; }
-        #station { font-size: 1.8rem; color: var(--yellow); font-weight: bold; text-transform: uppercase; }
+        .board { max-width: 900px; margin: auto; background: var(--bg); padding: 25px; border-radius: 12px; border: 1px solid #333; }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 15px; }
+        #station { font-size: 1.8rem; color: var(--yellow); font-weight: bold; }
         #clock { font-size: 1.8rem; font-family: monospace; }
-        .status-pill { font-size: 0.7rem; padding: 3px 8px; border-radius: 3px; margin-top: 5px; display: inline-block; text-transform: uppercase; }
-        .online { background: #003311; color: var(--green); border: 1px solid var(--green); }
-        .offline { background: #331100; color: #ff4444; border: 1px solid #ff4444; }
-        .row { display: flex; font-size: 1.4rem; font-weight: 600; padding: 15px 0; border-bottom: 1px solid #1a1a1a; align-items: center; }
-        .time { width: 80px; }
-        .dest { flex-grow: 1; margin: 0 15px; }
-        .plat { width: 50px; text-align: center; background: #222; border-radius: 4px; }
-        .etd { width: 100px; text-align: right; }
-        .calling { color: #888; font-size: 0.9rem; margin-top: 5px; white-space: nowrap; overflow: hidden; }
-        #diag { background: #111; color: #ff8800; padding: 10px; font-family: monospace; font-size: 0.75rem; margin-top: 20px; border-radius: 4px; display: none; }
+        .status-pill { font-size: 0.75rem; padding: 4px 10px; border-radius: 4px; margin-top: 10px; display: inline-block; }
+        .online { background: #004422; color: var(--green); }
+        .offline { background: #441111; color: #ff6666; }
+        .row { display: flex; font-size: 1.5rem; font-weight: bold; padding: 20px 0; border-bottom: 1px solid #1a1a1a; }
+        .time { width: 90px; }
+        .dest { flex-grow: 1; }
+        .plat { width: 50px; text-align: center; background: #222; border-radius: 5px; margin: 0 15px; }
+        .etd { width: 110px; text-align: right; }
+        #diag { background: #1a1a00; color: #ffcc00; padding: 15px; font-family: monospace; font-size: 0.8rem; margin-top: 20px; border: 1px dashed; display: none; }
     </style>
 </head>
 <body>
@@ -31,13 +28,11 @@
     <div class="header">
         <div>
             <div id="station">Liverpool Lime Street</div>
-            <div id="status" class="status-pill offline">Authorizing...</div>
+            <div id="status" class="status-pill offline">System Booting...</div>
         </div>
         <div id="clock">00:00:00</div>
     </div>
-    
-    <div id="list">Connecting to National Rail Darwin Feed...</div>
-    
+    <div id="list">Synchronizing with GitHub Pages...</div>
     <div id="diag"></div>
 </div>
 
@@ -49,31 +44,45 @@
         const list = document.getElementById('list');
         const status = document.getElementById('status');
         const diag = document.getElementById('diag');
-
-        // We use AllOrigins to wrap the request. This bypasses the "Load Failed" / CORS error.
+        
+        // Target Huxley URL
         const huxleyUrl = `https://huxley2.azurewebsites.net/departures/${CRS}?accessToken=${API_KEY}&expand=true`;
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(huxleyUrl)}&_=${new Date().getTime()}`;
+        
+        // If we are on GitHub Pages (HTTPS), try direct access first to avoid proxy errors
+        // If we are local, use the proxy
+        const useProxy = window.location.protocol === 'file:' || window.location.hostname.includes('github.io');
+        const finalUrl = useProxy ? `https://api.allorigins.win/get?url=${encodeURIComponent(huxleyUrl)}&_=${Date.now()}` : huxleyUrl;
 
         try {
-            const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error("Proxy Unreachable");
-            
-            const wrapper = await response.json();
-            const data = JSON.parse(wrapper.contents); // AllOrigins wraps the JSON as a string
+            const response = await fetch(finalUrl);
+            let data;
+
+            if (useProxy) {
+                const wrapper = await response.json();
+                // Check if the content inside the proxy is valid JSON
+                try {
+                    data = JSON.parse(wrapper.contents);
+                } catch (parseError) {
+                    throw new Error("The rail server returned an invalid response (Likely 401 Unauthorized). Check your API Key status.");
+                }
+            } else {
+                data = await response.json();
+            }
 
             if (data && data.trainServices) {
-                status.innerText = "GitHub Live Connection";
+                status.innerText = "Live: Connection Secure";
                 status.className = "status-pill online";
                 diag.style.display = "none";
                 render(data.trainServices);
             } else {
-                throw new Error("Key Validated, but no trains returned. Check if service is active.");
+                throw new Error("Authorized, but no train services found in the next 2 hours.");
             }
         } catch (e) {
-            status.innerText = "Connection Blocked";
+            status.innerText = "Connection Error";
             status.className = "status-pill offline";
-            diag.innerText = "Diagnostic: " + e.message + " | Ensure you are viewing this via your GitHub Pages URL, not a local file.";
+            diag.innerText = "System Log: " + e.message;
             diag.style.display = "block";
+            list.innerHTML = "<div style='color:#555'>Awaiting valid data string...</div>";
         }
     }
 
@@ -81,18 +90,13 @@
         const list = document.getElementById('list');
         list.innerHTML = '';
         trains.forEach(t => {
-            const stops = t.subsequentCallingPoints ? t.subsequentCallingPoints[0].callingPoint.map(cp => cp.locationName).join(' • ') : "See screens for stops";
-            const isDelayed = t.etd !== 'On Time';
-            
             list.innerHTML += `
                 <div class="row">
                     <div class="time">${t.std}</div>
                     <div class="dest">${t.destination[0].locationName}</div>
                     <div class="plat">${t.platform || '-'}</div>
-                    <div class="etd" style="color:${isDelayed ? '#ffa500' : '#00ff88'}">${t.etd}</div>
-                </div>
-                <div class="calling">${stops}</div>
-            `;
+                    <div class="etd" style="color:${t.etd === 'On Time' ? '#00ff88' : '#ffa500'}">${t.etd}</div>
+                </div>`;
         });
     }
 

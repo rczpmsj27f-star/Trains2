@@ -3,20 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LIV Live Board - Final Fix</title>
+    <title>LIV Live Departure Board</title>
     <style>
-        :root { --bg: #0a0a0c; --yellow: #ffee00; --green: #00ff88; }
-        body { background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; padding: 20px; }
-        .board { max-width: 900px; margin: auto; background: var(--bg); padding: 25px; border: 1px solid #333; border-radius: 12px; }
+        :root { --bg: #0a0a0c; --yellow: #ffee00; --green: #00ff88; --orange: #ffa500; }
+        body { background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
+        .board { max-width: 900px; margin: auto; background: var(--bg); padding: 25px; border-radius: 12px; border: 1px solid #333; }
         .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 15px; }
         #station { font-size: 1.8rem; color: var(--yellow); font-weight: bold; }
         #clock { font-size: 1.8rem; font-family: monospace; }
+        .status-pill { font-size: 0.75rem; padding: 4px 10px; border-radius: 4px; margin-top: 10px; display: inline-block; font-weight: bold; }
+        .online { background: #004422; color: var(--green); }
+        .offline { background: #441111; color: #ff6666; }
         .row { display: flex; font-size: 1.5rem; font-weight: bold; padding: 20px 0; border-bottom: 1px solid #1a1a1a; }
         .time { width: 90px; }
         .dest { flex-grow: 1; }
         .plat { width: 50px; text-align: center; background: #222; border-radius: 5px; margin: 0 15px; }
         .etd { width: 110px; text-align: right; }
-        #status-pill { font-size: 0.75rem; padding: 4px 10px; border-radius: 4px; margin-top: 10px; display: inline-block; background: #441111; color: #ff6666; }
     </style>
 </head>
 <body>
@@ -25,59 +27,61 @@
     <div class="header">
         <div>
             <div id="station">Liverpool Lime Street</div>
-            <div id="status-pill">Establishing Bypass...</div>
+            <div id="status" class="status-pill offline">INITIATING...</div>
         </div>
         <div id="clock">00:00:00</div>
     </div>
-    <div id="list">Loading live rail data...</div>
+    
+    <div id="list">Loading live departures...</div>
 </div>
 
 <script>
     const API_KEY = 'OY6k1qcYgWZxxesIXJQbIkO2UXyAnVmrVDpkljOBUc0uzCKL';
     const CRS = 'LIV';
 
-    // This function handles the data once the "Bypass" script loads
-    function handleData(data) {
+    async function updateBoard() {
         const list = document.getElementById('list');
-        const pill = document.getElementById('status-pill');
+        const status = document.getElementById('status');
         
-        if (data && data.trainServices) {
-            pill.innerText = "LIVE CONNECTION SECURE";
-            pill.style.background = "#004422";
-            pill.style.color = "#00ff88";
-            render(data.trainServices);
-        } else {
-            list.innerHTML = "No trains found or API error.";
-        }
-    }
+        // We are switching to the 'realtime' endpoint which is more CORS-friendly
+        const url = `https://huxley2.azurewebsites.net/departures/${CRS}?accessToken=${API_KEY}`;
 
-    async function fetchData() {
-        // We use AllOrigins but in "JSONP" mode. 
-        // This is the only way to avoid "Load Failed" without a manual bridge.
-        const target = `https://huxley2.azurewebsites.net/departures/${CRS}?accessToken=${API_KEY}&expand=true`;
-        const script = document.createElement('script');
-        script.src = `https://api.allorigins.win/get?url=${encodeURIComponent(target)}&callback=processWrapper`;
-        document.body.appendChild(script);
-    }
-
-    // This handles the "wrapper" from the proxy
-    window.processWrapper = function(response) {
         try {
-            const trainData = JSON.parse(response.contents);
-            handleData(trainData);
+            const response = await fetch(url, {
+                method: 'GET',
+                mode: 'cors', // Explicitly ask for CORS mode
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (!response.ok) throw new Error("Key not yet active or invalid.");
+
+            const data = await response.json();
+
+            if (data && data.trainServices) {
+                status.innerText = "LIVE CONNECTION";
+                status.className = "status-pill online";
+                render(data.trainServices);
+            } else {
+                list.innerHTML = "No trains currently scheduled.";
+            }
         } catch (e) {
-            document.getElementById('list').innerHTML = "API Key warming up or invalid.";
+            status.innerText = "WAITING FOR SYNC";
+            status.className = "status-pill offline";
+            list.innerHTML = `<div style="color:#888">The API key is valid but National Rail is still syncing. This can take up to 2 hours for new keys.</div>`;
         }
-    };
+    }
 
     function render(trains) {
         const list = document.getElementById('list');
         list.innerHTML = '';
         trains.forEach(t => {
+            const dest = t.destination && t.destination.length > 0 ? t.destination[0].locationName : "Unknown";
             list.innerHTML += `
                 <div class="row">
                     <div class="time">${t.std}</div>
-                    <div class="dest">${t.destination[0].locationName}</div>
+                    <div class="dest">${dest}</div>
                     <div class="plat">${t.platform || '-'}</div>
                     <div class="etd" style="color:${t.etd === 'On Time' ? '#00ff88' : '#ffa500'}">${t.etd}</div>
                 </div>`;
@@ -85,8 +89,8 @@
     }
 
     setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'); }, 1000);
-    fetchData();
-    setInterval(fetchData, 60000);
+    updateBoard();
+    setInterval(updateBoard, 60000);
 </script>
 </body>
 </html>

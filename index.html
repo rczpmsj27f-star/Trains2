@@ -42,7 +42,7 @@
         .service-footer { margin-top: 20px; color: var(--accent-blue); font-size: 1rem; font-weight: 600; text-transform: uppercase; border-top: 1px solid #1a1a1a; padding-top: 10px; }
         .on-time { color: var(--status-green); }
         .delayed { color: var(--status-orange); }
-        #debug-msg { color: #ff8800; font-size: 0.8rem; margin-top: 5px; display: none; font-family: monospace; border: 1px dashed; padding: 8px; }
+        #diag-msg { color: #ff8800; font-size: 0.85rem; padding: 10px; margin-top: 10px; border: 1px dashed; display: none; }
     </style>
 </head>
 <body>
@@ -51,63 +51,69 @@
     <div class="header">
         <div>
             <div id="station-name">Liverpool Lime Street</div>
-            <div id="status-pill" class="status-demo">Initializing...</div>
-            <div id="debug-msg"></div>
+            <div id="status-pill" class="status-demo">GitHub Authorization Pending</div>
+            <div id="diag-msg"></div>
         </div>
         <div class="controls">
             <div id="clock">00:00:00</div>
-            <button class="refresh-btn" onclick="fetchData()">REFRESH NOW</button>
+            <button class="refresh-btn" onclick="fetchData()">FORCE REFRESH</button>
             <div class="sync-info">Last Sync: <span id="sync-time">Never</span></div>
         </div>
     </div>
-    <div id="services-list">Connecting to rail network...</div>
+    <div id="services-list">Authorizing via GitHub Pages...</div>
 </div>
 
 <script>
-    // UPDATED KEY
     const TOKEN = 'OY6k1qcYgWZxxesIXJQbIkO2UXyAnVmrVDpkljOBUc0uzCKL';
     const STATION_CODE = 'LIV';
 
     async function fetchData() {
         const btn = document.querySelector('.refresh-btn');
-        const debug = document.getElementById('debug-msg');
-        btn.innerText = "SYNCING...";
+        const diag = document.getElementById('diag-msg');
+        btn.innerText = "AUTHORIZING...";
         
-        const targetUrl = `https://huxley2.azurewebsites.net/departures/${STATION_CODE}?accessToken=${TOKEN.trim()}&expand=true`;
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+        // Direct Huxley call. Works only on GitHub Pages or HTTPS servers.
+        const url = `https://huxley2.azurewebsites.net/departures/${STATION_CODE}?accessToken=${TOKEN.trim()}&expand=true`;
 
         try {
-            const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error();
+            const response = await fetch(url);
             
-            const wrapper = await response.json();
-            const data = JSON.parse(wrapper.contents);
-
-            if (data && data.trainServices) {
-                updateStatus(true);
-                renderBoard(data.trainServices);
-                debug.style.display = 'none';
-                finishSync();
-            } else {
-                throw new Error();
+            if (response.ok) {
+                const data = await response.json();
+                if (data && data.trainServices) {
+                    updateStatus(true);
+                    renderBoard(data.trainServices);
+                    diag.style.display = 'none';
+                    finishSync();
+                    return;
+                }
             }
+
+            // If we get here, the server responded but with an error (like 500 or 401)
+            throw new Error(response.status);
+
         } catch (e) {
             updateStatus(false);
             renderBoard(getMockData());
-            debug.innerText = "Connection Note: Feed is currently in Demo mode. If your key is new, please allow 60 mins for activation.";
-            debug.style.display = 'block';
+            diag.style.display = 'block';
+            
+            if (window.location.protocol === 'file:') {
+                diag.innerHTML = "<strong>CRITICAL:</strong> You are running this as a local file. GitHub Authorization only works once you upload this to <strong>GitHub Pages</strong>.";
+            } else {
+                diag.innerHTML = `<strong>API SYNC ERROR:</strong> Server returned status ${e.message}. The National Rail network is currently rejecting your key. Please verify your subscription is 'Active' on the Rail Data Marketplace.`;
+            }
             finishSync();
         }
     }
 
     function finishSync() {
         document.getElementById('sync-time').innerText = new Date().toLocaleTimeString('en-GB');
-        document.querySelector('.refresh-btn').innerText = "REFRESH NOW";
+        document.querySelector('.refresh-btn').innerText = "FORCE REFRESH";
     }
 
     function updateStatus(isLive) {
         const pill = document.getElementById('status-pill');
-        pill.innerText = isLive ? "Live Feed" : "Demo Mode";
+        pill.innerText = isLive ? "GitHub Live" : "GitHub Authorization Failed";
         pill.className = isLive ? "status-live" : "status-demo";
     }
 
@@ -116,25 +122,21 @@
         container.innerHTML = '';
         const coachLetters = "ABCDEFGHJKLMNPQRSTUVWXYZ".split("");
 
+        if (services.length === 0) {
+            container.innerHTML = "<div class='service-row'>No scheduled departures in the next 2 hours.</div>";
+            return;
+        }
+
         services.forEach(s => {
             const row = document.createElement('div');
             row.className = 'service-row';
             const destName = s.destination ? s.destination[0].locationName : (s.destinationName || "Unknown");
             
-            let stops = "Calling at: ";
-            if (s.subsequentCallingPoints) {
-                stops += s.subsequentCallingPoints[0].callingPoint.map(cp => `${cp.locationName} (${cp.st})`).join(' • ');
-            } else {
-                stops = "Intermediate station data is currently unavailable.";
-            }
-
+            let stops = "Calling at: " + (s.subsequentCallingPoints ? s.subsequentCallingPoints[0].callingPoint.map(cp => `${cp.locationName} (${cp.st})`).join(' • ') : "Information unavailable.");
             let coachHtml = '';
             const carCount = s.length || 0;
-            if (carCount > 0) {
-                for (let i = 0; i < carCount; i++) {
-                    const isFirst = (i < 2 && carCount > 4);
-                    coachHtml += `<div class="coach ${isFirst ? 'coach-first' : 'coach-std'}">${coachLetters[i] || i+1}</div>`;
-                }
+            for (let i = 0; i < carCount; i++) {
+                coachHtml += `<div class="coach ${i < 2 ? 'coach-first' : 'coach-std'}">${coachLetters[i] || i+1}</div>`;
             }
 
             row.innerHTML = `
@@ -146,22 +148,16 @@
                 </div>
                 <div style="padding-left:110px;">
                     <div class="marquee-container"><div class="marquee-text">${stops}</div></div>
-                    ${carCount > 0 ? `
-                    <div class="formation-wrapper">
-                        <span class="formation-label">Train Formation (${carCount} coaches)</span>
-                        <div class="coach-set">${coachHtml}</div>
-                    </div>` : ''}
-                    <div class="service-footer">${s.operator || 'National Rail'}</div>
-                </div>
-            `;
+                    ${carCount > 0 ? `<div class="formation-wrapper"><div class="coach-set">${coachHtml}</div></div>` : ''}
+                    <div class="service-footer">${s.operator}</div>
+                </div>`;
             container.appendChild(row);
         });
     }
 
     function getMockData() {
         return [
-            { std: "21:47", destinationName: "London Euston", platform: "7", etd: "On Time", operator: "Avanti West Coast", length: 11 },
-            { std: "22:04", destinationName: "Manchester Oxford Road", platform: "3", etd: "Delayed", operator: "Northern", length: 4 }
+            { std: "SYNCING", destinationName: "Waiting for GitHub...", platform: "-", etd: "...", operator: "System", length: 0 }
         ];
     }
 

@@ -5,29 +5,112 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LIV Live Departure Board</title>
     <style>
-        :root { --bg: #0a0a0c; --yellow: #ffee00; --green: #00ff88; --orange: #ffa500; }
-        body { background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; overflow: hidden; }
-        
-        .board { max-width: 1000px; margin: auto; background: var(--bg); padding: 30px; border-radius: 12px; border: 1px solid #333; position: relative; }
-        
-        /* Status Dot */
-        #status-indicator { position: absolute; top: 15px; right: 15px; width: 10px; height: 10px; border-radius: 50%; background: #333; transition: 0.3s; }
-        .status-online { background: var(--green) !important; box-shadow: 0 0 10px var(--green); }
-        .status-error { background: red !important; box-shadow: 0 0 10px red; }
+        :root { 
+            --bg: #0a0a0c; 
+            --yellow: #ffee00; 
+            --green: #00ff88; 
+            --orange: #ffa500; 
+            --dark-grey: #1a1a1a;
+        }
 
-        .header { display: flex; justify-content: space-between; border-bottom: 3px solid #333; padding-bottom: 10px; margin-bottom: 10px; }
-        #station-name { font-size: 2.5rem; color: var(--yellow); font-weight: 800; text-transform: uppercase; }
-        #clock { font-size: 2.5rem; font-family: monospace; font-weight: bold; }
+        body { 
+            background: #000; 
+            color: #fff; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            display: flex;
+            justify-content: center;
+        }
         
-        .row { display: flex; font-size: 1.8rem; font-weight: bold; padding: 15px 0; border-bottom: 1px solid #1a1a1a; align-items: center; }
-        .time { width: 110px; }
-        .dest-container { flex-grow: 1; display: flex; flex-direction: column; }
-        .dest { text-transform: uppercase; }
-        .calling-at { font-size: 0.9rem; color: #888; font-weight: normal; margin-top: 4px; }
-        .plat { width: 70px; text-align: center; background: #222; border-radius: 6px; margin: 0 20px; color: var(--yellow); border: 1px solid #444; }
-        .etd { width: 150px; text-align: right; }
+        /* Main Board Container */
+        .board { 
+            width: 100%;
+            max-width: 1100px; 
+            background: var(--bg); 
+            padding: 30px; 
+            border-radius: 15px; 
+            border: 1px solid #333; 
+            position: relative;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.9);
+        }
+        
+        /* Status Dot in top right */
+        #status-indicator { 
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+            width: 12px; 
+            height: 12px; 
+            border-radius: 50%; 
+            background: #333; 
+            transition: background 0.5s, box-shadow 0.5s; 
+        }
+        .status-online { background: var(--green) !important; box-shadow: 0 0 15px var(--green); }
+        .status-error { background: #ff4444 !important; box-shadow: 0 0 15px #ff4444; }
 
-        .status-msg { padding: 80px; text-align: center; font-size: 1.2rem; color: #888; }
+        /* Header Layout */
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-end;
+            border-bottom: 4px solid var(--dark-grey); 
+            padding-bottom: 15px; 
+            margin-bottom: 15px; 
+        }
+        #station-name { 
+            font-size: 2.8rem; 
+            color: var(--yellow); 
+            font-weight: 900; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+        }
+        #clock { 
+            font-size: 2.8rem; 
+            font-family: 'Courier New', monospace; 
+            font-weight: bold; 
+            color: #fff;
+        }
+        
+        /* Table Rows */
+        .row { 
+            display: flex; 
+            font-size: 1.8rem; 
+            font-weight: bold; 
+            padding: 18px 0; 
+            border-bottom: 1px solid var(--dark-grey); 
+            align-items: center; 
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+        .time { width: 120px; color: #fff; }
+        .dest-container { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .dest { text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .calling-at { font-size: 0.95rem; color: #aaa; font-weight: normal; margin-top: 5px; }
+        
+        .plat { 
+            width: 80px; 
+            text-align: center; 
+            background: #222; 
+            border-radius: 8px; 
+            margin: 0 25px; 
+            color: var(--yellow); 
+            border: 1px solid #444; 
+            font-size: 1.6rem;
+        }
+        .etd { width: 160px; text-align: right; }
+
+        .status-msg { 
+            padding: 100px 20px; 
+            text-align: center; 
+            font-size: 1.4rem; 
+            color: #666; 
+            line-height: 1.6;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
@@ -40,12 +123,14 @@
     </div>
     
     <div id="train-list">
-        <div class="status-msg">Initialising connection to rail-proxy...</div>
+        <div class="status-msg">
+            Connecting to Rail Proxy...
+        </div>
     </div>
 </div>
 
 <script>
-    // YOUR CLOUDFLARE URL
+    // Configuration
     const PROXY_URL = "https://railproxy.trr4qy5vhk.workers.dev/"; 
 
     async function updateBoard() {
@@ -54,18 +139,33 @@
         
         try {
             const response = await fetch(PROXY_URL);
+            
+            // If the worker responds at all, turn the dot green
+            dot.className = 'status-online';
+            
             const data = await response.json();
 
             if (data.trainServices && data.trainServices.length > 0) {
-                dot.className = 'status-online';
                 render(data.trainServices);
-            } else if (data.error) {
-                dot.className = 'status-error';
-                list.innerHTML = `<div class="status-msg"><span style="color:var(--orange)">${data.error}</span><br><small>${data.help || 'National Rail is verifying your key.'}</small></div>`;
+            } else if (data.error || data.help) {
+                // Shows the National Rail Sync message
+                list.innerHTML = `
+                    <div class="status-msg">
+                        <span style="color:var(--orange); font-size: 1.8rem; font-weight: bold;">
+                            ${data.error || 'Syncing...'}
+                        </span><br><br>
+                        ${data.help || 'Please wait while National Rail verifies your API key.'}
+                    </div>`;
+            } else {
+                list.innerHTML = `<div class="status-msg">No departures scheduled.</div>`;
             }
         } catch (e) {
             dot.className = 'status-error';
-            list.innerHTML = `<div class="status-msg" style="color:red">Worker Connection Error<br><small>The URL is correct, but the Worker may be hitting a CORS block.</small></div>`;
+            list.innerHTML = `
+                <div class="status-msg" style="color:#ff4444">
+                    <strong>Connection Failed</strong><br>
+                    <small>Ensure the Cloudflare Worker is Deployed.</small>
+                </div>`;
         }
     }
 
@@ -73,22 +173,22 @@
         const list = document.getElementById('train-list');
         list.innerHTML = '';
         
-        trains.slice(0, 6).forEach(t => {
-            const dest = t.destination[0].locationName;
+        trains.slice(0, 7).forEach(t => {
+            const destName = t.destination[0].locationName;
             const statusColor = t.etd === 'On Time' ? 'var(--green)' : 'var(--orange)';
             
-            // Get calling points if they exist
+            // Extract calling points if available
             let callingAt = "";
-            if (t.subsequentCallingPoints) {
+            if (t.subsequentCallingPoints && t.subsequentCallingPoints[0].callingPoint) {
                 const points = t.subsequentCallingPoints[0].callingPoint;
-                callingAt = "Calling at: " + points.map(p => p.locationName).slice(0, 3).join(", ") + "...";
+                callingAt = "Calling at: " + points.map(p => p.locationName).slice(0, 4).join(", ") + "...";
             }
 
             list.innerHTML += `
                 <div class="row">
                     <div class="time">${t.std}</div>
                     <div class="dest-container">
-                        <div class="dest">${dest}</div>
+                        <div class="dest">${destName}</div>
                         <div class="calling-at">${callingAt}</div>
                     </div>
                     <div class="plat">${t.platform || '-'}</div>
@@ -97,9 +197,15 @@
         });
     }
 
-    setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'); }, 1000);
+    // Time update loop
+    setInterval(() => {
+        document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB');
+    }, 1000);
+
+    // Initial fetch and 30-second refresh
     updateBoard();
-    setInterval(updateBoard, 30000); // Refresh every 30 seconds
+    setInterval(updateBoard, 30000);
 </script>
+
 </body>
 </html>
